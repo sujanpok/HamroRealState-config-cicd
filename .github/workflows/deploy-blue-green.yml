@@ -1,0 +1,41 @@
+name: CI/CD Deploy via Argo CD (Blue-Green)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Build and push your Docker image (adapt as needed)
+      - name: Docker Login
+        run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -t myapp:${{ github.sha }} .
+          docker tag myapp:${{ github.sha }} myrepo/myapp:${{ github.sha }}
+
+      - name: Push Docker image
+        run: docker push myrepo/myapp:${{ github.sha }}
+
+      # Update the blue/green deployment manifest with the new image tag. This assumes "blue-deployment.yaml" or "green-deployment.yaml" exists and uses `image:` appropriately.
+      - name: Update deployment manifest
+        run: |
+          sed -i "s|image: myrepo/myapp:.*|image: myrepo/myapp:${{ github.sha }}|g" k3s/k8s-manifests/room-management/blue-deployment.yaml
+          # optionally update green-deployment.yaml in the same way if you are flipping
+
+      # Commit the updated manifest so Argo CD knows about it
+      - name: Commit updated manifest
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add k3s/k8s-manifests/room-management/blue-deployment.yaml
+          git commit -m "Update room-management blue deployment to ${{ github.sha }}"
+          git push origin main
