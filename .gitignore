@@ -1,3 +1,2 @@
 .vscode
-docker/.env
 cloudflared/*.json
